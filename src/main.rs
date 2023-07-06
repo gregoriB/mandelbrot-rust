@@ -3,36 +3,52 @@ use image::ColorType;
 use num::Complex;
 use std::env;
 use std::fs::File;
+use std::io::Error;
+use std::panic::catch_unwind;
 use std::str::FromStr;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
+    let operation = catch_unwind(|| generate_mandelbrot_image(&args));
 
-    if args.len() < 5 {
-        eprint!("Usage: {} FILE PIXELS UPPERLEFT LOWERRIGHT", args[0]);
-        eprint!(
-            "Example: {} mandel.png 1000x750 -1.20,0.35 -1,0.20",
-            args[0],
-        );
-        std::process::exit(1);
+    if operation.is_err() {
+        error_and_exit(&args[0]);
     }
-
-    let bounds = parse_pair(&args[2], 'x').expect("Error parsing image dimensions");
-    let upper_left = parse_complex(&args[3]).expect("Error parsing upper left corner point");
-    let lower_right = parse_complex(&args[4]).expect("Error parsing lower right corner point");
-    let mut pixels = vec![0; bounds.0 * bounds.1];
-
-    let processor_strategy = match args.last().unwrap().as_str() {
-        "-st" => single_threaded,
-        _ => multi_threaded,
-    };
-
-    processor_strategy(&mut pixels, bounds, upper_left, lower_right);
-
-    write_image(&args[1], &pixels, bounds).expect("Error writing PNG file");
 }
 
-fn single_threaded(
+fn generate_mandelbrot_image(args: &Vec<String>) -> Result<(), Error> {
+    let is_processor_strategy = match args.last().unwrap().as_str() {
+        "-st" => true,
+        _ => false,
+    };
+
+    if let [_, filename, bounds_input, pair_1, pair_2] = &args[..=4] {
+        let bounds = parse_pair(&bounds_input, 'x').expect("Error parsing image dimensions");
+        let upper_left = parse_complex(&pair_1).expect("Error parsing upper left corner point");
+        let lower_right = parse_complex(&pair_2).expect("Error parsing lower right corner point");
+        let mut pixels = vec![0; bounds.0 * bounds.1];
+        let render_strategy = match is_processor_strategy {
+            true => render_single_threaded,
+            _ => render_multi_threaded,
+        };
+        render_strategy(&mut pixels, bounds, upper_left, lower_right);
+        write_image(&filename, &pixels, bounds).expect("Error writing PNG file");
+    }
+
+    Ok(())
+}
+
+fn error_and_exit(target_path: &str) {
+    eprint!("\n");
+    eprint!("Usage: <target_path> <file_name> <resolution> <upper_left> <lower_right> \n",);
+    eprint!(
+        "Example: {} mandel.png 1000x750 -1.20,0.35 -1,0.20",
+        target_path,
+    );
+    std::process::exit(1);
+}
+
+fn render_single_threaded(
     pixels: &mut [u8],
     bounds: (usize, usize),
     upper_left: Complex<f64>,
@@ -42,19 +58,19 @@ fn single_threaded(
     render(pixels, bounds, upper_left, lower_right);
 }
 
-fn multi_threaded(
+fn render_multi_threaded(
     pixels: &mut [u8],
     bounds: (usize, usize),
     upper_left: Complex<f64>,
     lower_right: Complex<f64>,
 ) {
     let threads = num_cpus::get();
-    println!(
-        "Performing multi-threaded computations on {} cores",
-        threads
-    );
     let rows_per_band = bounds.1 / threads + 1;
     let bands: Vec<&mut [u8]> = pixels.chunks_mut(rows_per_band * bounds.0).collect();
+    println!(
+        "Performing multi-threaded computations across {} thread",
+        threads
+    );
     crossbeam::scope(|spawner| {
         for (i, band) in bands.into_iter().enumerate() {
             let top = rows_per_band * i;
@@ -134,11 +150,7 @@ fn render(
     }
 }
 
-fn write_image(
-    filename: &str,
-    pixels: &[u8],
-    bounds: (usize, usize),
-) -> Result<(), std::io::Error> {
+fn write_image(filename: &str, pixels: &[u8], bounds: (usize, usize)) -> Result<(), Error> {
     let output = File::create(filename)?;
     let encoder = PNGEncoder::new(output);
     encoder.encode(pixels, bounds.0 as u32, bounds.1 as u32, ColorType::Gray(8))?;
