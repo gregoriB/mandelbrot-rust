@@ -5,6 +5,9 @@
 
 Generated with command:
 ````
-time target/release/mandelbrot mandel.png 4000x3000 -1.20,0.35 -1,0.20
+$ cargo build --release
+$ target/release/mandelbrot mandel.png 4000x3000 -1.20,0.35 -1,0.20
 ````
+
+Supports adding flag `-st` to the end to run in single threaded mode
 </div>
