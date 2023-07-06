@@ -5,15 +5,19 @@ use std::env;
 use std::fs::File;
 use std::io::Error;
 use std::panic::catch_unwind;
+use std::process::ExitCode;
 use std::str::FromStr;
 
-fn main() {
+fn main() -> ExitCode {
     let args: Vec<String> = env::args().collect();
     let operation = catch_unwind(|| generate_mandelbrot_image(&args));
 
     if operation.is_err() {
-        error_and_exit(&args[0]);
+        alert_error(&args[0]);
+        return ExitCode::FAILURE;
     }
+
+    ExitCode::SUCCESS
 }
 
 fn generate_mandelbrot_image(args: &Vec<String>) -> Result<(), Error> {
@@ -38,14 +42,13 @@ fn generate_mandelbrot_image(args: &Vec<String>) -> Result<(), Error> {
     Ok(())
 }
 
-fn error_and_exit(target_path: &str) {
+fn alert_error(target_path: &str) {
     eprint!("\n");
     eprint!("Usage: <target_path> <file_name> <resolution> <upper_left> <lower_right> \n",);
     eprint!(
         "Example: {} mandel.png 1000x750 -1.20,0.35 -1,0.20",
         target_path,
     );
-    std::process::exit(1);
 }
 
 fn render_single_threaded(
