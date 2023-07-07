@@ -7,13 +7,14 @@ use std::io::Error;
 use std::panic::catch_unwind;
 use std::process::ExitCode;
 use std::str::FromStr;
+use std::thread::scope;
 
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().collect();
     let operation = catch_unwind(|| generate_mandelbrot_image(&args));
 
     if operation.is_err() {
-        alert_error(&args[0]);
+        alert_error();
         return ExitCode::FAILURE;
     }
 
@@ -26,7 +27,7 @@ fn generate_mandelbrot_image(args: &Vec<String>) -> Result<(), Error> {
         _ => false,
     };
 
-    if let [_, filename, bounds_input, pair_1, pair_2] = &args[..=4] {
+    if let [filename, bounds_input, pair_1, pair_2] = &args[1..5] {
         let bounds = parse_pair(&bounds_input, 'x').expect("Error parsing image dimensions");
         let upper_left = parse_complex(&pair_1).expect("Error parsing upper left corner point");
         let lower_right = parse_complex(&pair_2).expect("Error parsing lower right corner point");
@@ -42,13 +43,10 @@ fn generate_mandelbrot_image(args: &Vec<String>) -> Result<(), Error> {
     Ok(())
 }
 
-fn alert_error(target_path: &str) {
+fn alert_error() {
     eprint!("\n");
     eprint!("Usage: <target_path> <file_name> <resolution> <upper_left> <lower_right> \n",);
-    eprint!(
-        "Example: {} mandel.png 1000x750 -1.20,0.35 -1,0.20",
-        target_path,
-    );
+    eprint!("Example: target/release/mandelbrot mandel.png 4000x3000 -1.20,0.35 -1,0.20");
 }
 
 fn render_single_threaded(
@@ -74,7 +72,7 @@ fn render_multi_threaded(
         "Performing multi-threaded computations across {} thread",
         threads
     );
-    crossbeam::scope(|spawner| {
+    scope(|spawner| {
         for (i, band) in bands.into_iter().enumerate() {
             let top = rows_per_band * i;
             let height = band.len() / bounds.0;
@@ -83,10 +81,9 @@ fn render_multi_threaded(
             let band_lower_right =
                 pixel_to_point(bounds, (bounds.0, top + height), upper_left, lower_right);
 
-            spawner.spawn(move |_| render(band, band_bounds, band_upper_left, band_lower_right));
+            spawner.spawn(move || render(band, band_bounds, band_upper_left, band_lower_right));
         }
-    })
-    .unwrap();
+    });
 }
 
 fn escape_time(c: Complex<f64>, limit: usize) -> Option<usize> {
