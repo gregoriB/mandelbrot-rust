@@ -69,7 +69,7 @@ fn render_multi_threaded(
     let rows_per_band = bounds.1 / threads + 1;
     let bands: Vec<&mut [u8]> = pixels.chunks_mut(rows_per_band * bounds.0).collect();
     println!(
-        "Performing multi-threaded computations across {} thread",
+        "Performing multi-threaded computations across {} threads",
         threads
     );
     scope(|spawner| {
