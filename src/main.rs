@@ -29,14 +29,14 @@ fn generate_mandelbrot_image(args: &Vec<String>) -> Result<(), Error> {
 
     if let [filename, bounds_input, pair_1, pair_2] = &args[1..5] {
         let bounds = parse_pair(&bounds_input, 'x').expect("Error parsing image dimensions");
-        let upper_left = parse_complex(&pair_1).expect("Error parsing upper left corner point");
-        let lower_right = parse_complex(&pair_2).expect("Error parsing lower right corner point");
+        let top_left = parse_complex(&pair_1).expect("Error parsing top left corner point");
+        let bottom_right = parse_complex(&pair_2).expect("Error parsing bottom right corner point");
         let mut pixels = vec![0; bounds.0 * bounds.1];
         let render_strategy = match is_processor_strategy {
             true => render_single_threaded,
             _ => render_multi_threaded,
         };
-        render_strategy(&mut pixels, bounds, upper_left, lower_right);
+        render_strategy(&mut pixels, bounds, top_left, bottom_right);
         write_image(&filename, &pixels, bounds).expect("Error writing PNG file");
     }
 
@@ -44,26 +44,26 @@ fn generate_mandelbrot_image(args: &Vec<String>) -> Result<(), Error> {
 }
 
 fn alert_error() {
-    eprint!("\n");
-    eprint!("Usage: <target_path> <file_name> <resolution> <upper_left> <lower_right> \n",);
-    eprint!("Example: target/release/mandelbrot mandel.png 4000x3000 -1.20,0.35 -1,0.20");
+    eprintln!("");
+    eprintln!("Usage: <target path> <file name> <resolution> <top left> <bottom right>",);
+    eprintln!("Example: target/release/mandelbrot mandel.png 4000x3000 -1.20,0.35 -1,0.20");
 }
 
 fn render_single_threaded(
     pixels: &mut [u8],
     bounds: (usize, usize),
-    upper_left: Complex<f64>,
-    lower_right: Complex<f64>,
+    top_left: Complex<f64>,
+    bottom_right: Complex<f64>,
 ) {
     println!("Performing single-threaded computations");
-    render(pixels, bounds, upper_left, lower_right);
+    render(pixels, bounds, top_left, bottom_right);
 }
 
 fn render_multi_threaded(
     pixels: &mut [u8],
     bounds: (usize, usize),
-    upper_left: Complex<f64>,
-    lower_right: Complex<f64>,
+    top_left: Complex<f64>,
+    bottom_right: Complex<f64>,
 ) {
     let threads = num_cpus::get();
     let rows_per_band = bounds.1 / threads + 1;
@@ -77,11 +77,11 @@ fn render_multi_threaded(
             let top = rows_per_band * i;
             let height = band.len() / bounds.0;
             let band_bounds = (bounds.0, height);
-            let band_upper_left = pixel_to_point(bounds, (0, top), upper_left, lower_right);
-            let band_lower_right =
-                pixel_to_point(bounds, (bounds.0, top + height), upper_left, lower_right);
+            let band_top_left = pixel_to_point(bounds, (0, top), top_left, bottom_right);
+            let band_bottom_right =
+                pixel_to_point(bounds, (bounds.0, top + height), top_left, bottom_right);
 
-            spawner.spawn(move || render(band, band_bounds, band_upper_left, band_lower_right));
+            spawner.spawn(move || render(band, band_bounds, band_top_left, band_bottom_right));
         }
     });
 }
@@ -118,30 +118,27 @@ fn parse_complex(s: &str) -> Option<Complex<f64>> {
 fn pixel_to_point(
     bounds: (usize, usize),
     pixel: (usize, usize),
-    upper_left: Complex<f64>,
-    lower_right: Complex<f64>,
+    top_left: Complex<f64>,
+    bottom_right: Complex<f64>,
 ) -> Complex<f64> {
-    let (width, heigth) = (
-        lower_right.re - upper_left.re,
-        upper_left.im - lower_right.im,
-    );
+    let (width, heigth) = (bottom_right.re - top_left.re, top_left.im - bottom_right.im);
     Complex {
-        re: upper_left.re + pixel.0 as f64 * width / bounds.0 as f64,
-        im: upper_left.im - pixel.1 as f64 * heigth / bounds.1 as f64,
+        re: top_left.re + pixel.0 as f64 * width / bounds.0 as f64,
+        im: top_left.im - pixel.1 as f64 * heigth / bounds.1 as f64,
     }
 }
 
 fn render(
     pixels: &mut [u8],
     bounds: (usize, usize),
-    upper_left: Complex<f64>,
-    lower_right: Complex<f64>,
+    top_left: Complex<f64>,
+    bottom_right: Complex<f64>,
 ) {
     assert!(pixels.len() == bounds.0 * bounds.1);
 
     for row in 0..bounds.1 {
         for column in 0..bounds.0 {
-            let point = pixel_to_point(bounds, (column, row), upper_left, lower_right);
+            let point = pixel_to_point(bounds, (column, row), top_left, bottom_right);
             pixels[row * bounds.0 + column] = match escape_time(point, 255) {
                 None => 0,
                 Some(count) => 255 - count as u8,
