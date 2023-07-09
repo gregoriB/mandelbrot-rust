@@ -22,9 +22,9 @@ fn main() -> ExitCode {
 }
 
 fn generate_mandelbrot_image(args: &Vec<String>) -> Result<(), Error> {
-    let is_processor_strategy = match args.last().unwrap().as_str() {
-        "-st" => true,
-        _ => false,
+    let render_strategy = match args.last().unwrap().as_str() {
+        "-st" => render_single_threaded,
+        _ => render_multi_threaded,
     };
 
     if let [filename, bounds_input, pair_1, pair_2] = &args[1..5] {
@@ -32,10 +32,6 @@ fn generate_mandelbrot_image(args: &Vec<String>) -> Result<(), Error> {
         let top_left = parse_complex(&pair_1).expect("Error parsing top left corner point");
         let bottom_right = parse_complex(&pair_2).expect("Error parsing bottom right corner point");
         let mut pixels = vec![0; bounds.0 * bounds.1];
-        let render_strategy = match is_processor_strategy {
-            true => render_single_threaded,
-            _ => render_multi_threaded,
-        };
         render_strategy(&mut pixels, bounds, top_left, bottom_right);
         write_image(&filename, &pixels, bounds).expect("Error writing PNG file");
     }
